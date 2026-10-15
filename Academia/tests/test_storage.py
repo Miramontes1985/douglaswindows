@@ -1,5 +1,6 @@
 import csv
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -174,7 +175,7 @@ class StoreTests(unittest.TestCase):
         self.assertTrue(safety.is_file())
         self.assertEqual(len(self.store.members()), 1)
         self.assertFalse(self.store.invoices(TODAY, "paid"))
-        with sqlite3.connect(safety) as connection:
+        with closing(sqlite3.connect(safety)) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM members").fetchone()[0], 2)
             self.assertIsNotNone(connection.execute("SELECT paid_on FROM invoices ORDER BY id").fetchone()[0])
 
@@ -189,7 +190,7 @@ class StoreTests(unittest.TestCase):
 
     def test_future_schema_restore_rejected(self):
         path = Path(self.tmp.name) / "future.sqlite3"
-        with sqlite3.connect(path) as connection:
+        with closing(sqlite3.connect(path)) as connection:
             connection.execute(f"PRAGMA application_id={APP_ID}")
             connection.execute("PRAGMA user_version=999")
         with self.assertRaises(ValueError):
@@ -199,7 +200,7 @@ class StoreTests(unittest.TestCase):
         first = self.store.automatic_backup(TODAY)
         self.member()
         self.store.automatic_backup(TODAY)
-        with sqlite3.connect(first) as connection:
+        with closing(sqlite3.connect(first)) as connection:
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM members").fetchone()[0], 1)
         for offset in range(35):
             self.store.automatic_backup(TODAY + timedelta(days=offset))

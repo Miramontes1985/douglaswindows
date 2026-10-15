@@ -5,6 +5,7 @@ import calendar
 import csv
 import os
 import sqlite3
+from contextlib import closing
 import sys
 import unicodedata
 import uuid
@@ -310,7 +311,7 @@ class Store:
         # Cria primeiro ao lado do destino. Um erro não deixa uma cópia parcial visível.
         temporary = destination.with_name(destination.name + ".partial")
         try:
-            with sqlite3.connect(temporary) as output:
+            with closing(sqlite3.connect(temporary)) as output:
                 self.connection.backup(output)
             os.replace(temporary, destination)
         finally:
