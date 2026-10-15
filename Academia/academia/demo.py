@@ -6,6 +6,7 @@ from .storage import month_start
 def seed_demo(store, today: date):
     if store.members():
         return
+    store.set_basic_monthly_cents(15000, today)
     examples = [
         ("Ana Paula Martins", -8, 15000), ("Carlos Eduardo Silva", -4, 15000),
         ("Mariana Oliveira", 0, 18000), ("João Pedro Santos", 2, 15000),
@@ -18,6 +19,7 @@ def seed_demo(store, today: date):
         member_id = store.save_member({
             "name": name, "phone": "(11) 90000-0000", "address": "Rua de Exemplo, 100 · Centro",
             "joined_on": joined.isoformat(), "due_day": due.day, "monthly_cents": amount,
+            "fee_type": "basic" if amount == 15000 else "custom",
             "first_month": month_start(due).isoformat(), "notes": "",
         }, today)
         if index >= 6:

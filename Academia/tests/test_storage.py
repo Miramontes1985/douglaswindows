@@ -134,6 +134,127 @@ class StoreTests(unittest.TestCase):
         self.store.save_member(member, TODAY, mid)
         self.assertEqual(self.store.invoices(TODAY, member_id=mid)[0]["due_on"], "2026-10-14")
 
+    def test_basic_fee_updates_linked_members_and_preserves_history(self):
+        self.store.set_basic_monthly_cents(15000, TODAY)
+        paid = self.member(name="Aluno pago", fee_type="basic", due_day=20)
+        paid_invoice = self.store.invoices(TODAY, member_id=paid)[0]
+        self.store.pay(paid_invoice["id"], TODAY, "Pix", TODAY)
+        late = self.member(name="Aluno atrasado", fee_type="basic", due_day=10)
+        due = self.member(name="Aluno de hoje", fee_type="basic", due_day=14)
+        future = self.member(name="Aluno futuro", fee_type="basic", due_day=20)
+        inactive = self.member(name="Aluno inativo", fee_type="basic", due_day=20)
+        self.store.set_active(inactive, False, TODAY)
+        custom = self.member(name="Aluno personalizado", due_day=20)
+
+        self.store.set_basic_monthly_cents(18050, TODAY)
+        for mid in (paid, late, due, future, inactive):
+            self.assertEqual(self.store.member(mid)["monthly_cents"], 18050)
+        self.assertEqual(self.store.member(custom)["monthly_cents"], 15000)
+        for mid, expected in ((paid, 15000), (late, 15000), (due, 18050), (future, 18050), (custom, 15000)):
+            self.assertEqual(self.store.invoices(TODAY, "all", member_id=mid)[0]["amount_cents"], expected)
+        self.assertFalse(self.store.invoices(TODAY, member_id=inactive))
+        self.store.undo_payment(paid_invoice["id"])
+        self.assertEqual(self.store.invoice(paid_invoice["id"])["amount_cents"], 15000)
+
+        self.store.close()
+        self.store = Store(self.tmp.name)
+        self.assertEqual(self.store.basic_monthly_cents(), 18050)
+        self.store.refresh(date(2026, 11, 14))
+        self.assertEqual(self.store.invoices(date(2026, 11, 14), member_id=late)[-1]["amount_cents"], 18050)
+        self.store.set_active(inactive, True, date(2026, 11, 14))
+        self.assertEqual(self.store.invoices(date(2026, 11, 14), member_id=inactive)[0]["amount_cents"], 18050)
+
+    def test_basic_fee_update_generates_missed_months_at_previous_price(self):
+        self.store.set_basic_monthly_cents(15000, TODAY)
+        mid = self.member(fee_type="basic", due_day=20)
+        later = date(2027, 1, 14)
+        self.store.set_basic_monthly_cents(20000, later)
+        rows = self.store.invoices(later, member_id=mid)
+        self.assertEqual([row["amount_cents"] for row in rows], [15000, 15000, 15000, 20000])
+        self.assertEqual(rows[-1]["due_on"], "2027-01-20")
+
+    def test_basic_fee_updates_prepared_next_month_and_new_students(self):
+        self.store.set_basic_monthly_cents(15000, TODAY)
+        mid = self.member(fee_type="basic", due_day=3)
+        later = date(2026, 10, 29)
+        self.store.refresh(later)
+        self.store.set_basic_monthly_cents(17500, later)
+        rows = self.store.invoices(later, member_id=mid)
+        self.assertEqual([row["amount_cents"] for row in rows], [15000, 17500])
+        new = self.member(name="Novo aluno", fee_type="basic", monthly_cents=1)
+        self.assertEqual(self.store.member(new)["monthly_cents"], 17500)
+
+    def test_switching_between_basic_and_custom_prices(self):
+        self.store.set_basic_monthly_cents(17000, TODAY)
+        mid = self.member(due_day=20)
+        member = self.store.member(mid)
+        member.update(fee_type="basic", monthly_cents=1)
+        self.store.save_member(member, TODAY, mid)
+        self.assertEqual(self.store.member(mid)["monthly_cents"], 17000)
+        member = self.store.member(mid)
+        member.update(fee_type="custom", monthly_cents=13500)
+        self.store.save_member(member, TODAY, mid)
+        self.store.set_basic_monthly_cents(19000, TODAY)
+        self.assertEqual(self.store.member(mid)["monthly_cents"], 13500)
+        self.assertEqual(self.store.invoices(TODAY, member_id=mid)[0]["amount_cents"], 13500)
+
+    def test_basic_fee_requires_configuration_and_rejects_invalid_updates(self):
+        self.assertIsNone(self.store.basic_monthly_cents())
+        with self.assertRaisesRegex(ValueError, "aba Mensalidades"):
+            self.member(fee_type="basic")
+        self.assertFalse(self.store.members())
+        self.store.set_basic_monthly_cents(15000, TODAY)
+        mid = self.member(fee_type="basic")
+        for value in (0, -10, 100000000, 150.5, "15000", None, True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.store.set_basic_monthly_cents(value, TODAY)
+            self.assertEqual(self.store.basic_monthly_cents(), 15000)
+            self.assertEqual(self.store.member(mid)["monthly_cents"], 15000)
+
+    def legacy_backup(self):
+        target = Path(self.tmp.name) / "versao-1.sqlite3"
+        self.store.backup(target)
+        with closing(sqlite3.connect(target)) as connection:
+            connection.executescript("""
+                ALTER TABLE members DROP COLUMN fee_type;
+                DROP TABLE billing_settings;
+                PRAGMA user_version=1;
+            """)
+        return target
+
+    def test_legacy_database_and_backups_migrate_without_changing_prices(self):
+        mid = self.member(monthly_cents=14500)
+        legacy = self.legacy_backup()
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "academia.sqlite3").write_bytes(legacy.read_bytes())
+            migrated = Store(directory)
+            try:
+                self.assertEqual(migrated.member(mid)["fee_type"], "custom")
+                self.assertEqual(migrated.member(mid)["monthly_cents"], 14500)
+                self.assertIsNone(migrated.basic_monthly_cents())
+                migrated.set_basic_monthly_cents(18000, TODAY)
+                self.assertEqual(migrated.member(mid)["monthly_cents"], 14500)
+            finally:
+                migrated.close()
+        self.store.set_basic_monthly_cents(20000, TODAY)
+        self.store.restore(legacy)
+        self.assertIsNone(self.store.basic_monthly_cents())
+        self.assertEqual(self.store.member(mid)["fee_type"], "custom")
+        self.assertEqual(self.store.invoices(TODAY)[0]["amount_cents"], 14500)
+        with closing(sqlite3.connect(legacy)) as connection:
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+
+    def test_backup_restores_basic_fee_and_member_selection(self):
+        self.store.set_basic_monthly_cents(15000, TODAY)
+        mid = self.member(fee_type="basic", due_day=20)
+        target = self.store.backup(Path(self.tmp.name) / "basica.sqlite3")
+        self.store.set_basic_monthly_cents(20000, TODAY)
+        self.store.restore(target)
+        self.assertEqual(self.store.basic_monthly_cents(), 15000)
+        self.assertEqual(self.store.member(mid)["fee_type"], "basic")
+        self.store.set_basic_monthly_cents(18000, TODAY)
+        self.assertEqual(self.store.invoices(TODAY)[0]["amount_cents"], 18000)
+
     def test_deactivate_preserves_debt_and_skips_inactive_months(self):
         mid = self.member(due_day=10)
         self.store.set_active(mid, False, TODAY)

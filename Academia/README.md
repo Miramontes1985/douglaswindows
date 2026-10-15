@@ -13,6 +13,7 @@ Este projeto é independente da consultoria online. O retrato foi **copiado** de
 - Painel com alunos ativos, valores atrasados, vencimentos de hoje e dos próximos 7 dias e total recebido no mês.
 - Cadastro, edição, busca por nome ou telefone, desativação e exclusão de alunos.
 - Nome, endereço, telefone, data de entrada, dia de vencimento, mensalidade e observações.
+- Mensalidade básica configurável na aba Mensalidades, com reajuste coletivo dos alunos vinculados, e opção de valor personalizado por aluno.
 - Mensalidades recorrentes, filtros por situação, recebimento com data e forma de pagamento e opção de desfazer um recebimento.
 - Ficha com histórico de mensalidades de cada aluno.
 - Exportação para CSV compatível com Excel, com acentos, separador `;` e valores com vírgula.
@@ -21,6 +22,14 @@ Este projeto é independente da consultoria online. O retrato foi **copiado** de
 - Prévia opcional com dados fictícios, separada dos cadastros reais e sem avisos sobrepostos à interface.
 
 ## Experimentar agora
+
+### Aplicativo para Mac, sem instalar Python
+
+Abra `output/Power-Academia-Mac-Apple-Silicon.dmg`, arraste **Power Academia** para **Applications** e abra pela pasta Aplicativos. Este pacote é nativo para Macs com chip Apple, como este computador. Os dados ficam no Mac, separados do aplicativo.
+
+Para gerar novamente o DMG neste Mac, instale `requirements-build.txt` no ambiente `.venv` e execute `./build_macos.sh`. O script empacota o aplicativo, verifica a assinatura local, testa cadastro, temas, pagamento, exportação e backup com dados temporários e confere a integridade do DMG. O resultado dos testes fica em `output/validacao-macos.json`.
+
+### Executar pelo código
 
 No macOS, requer Python 3.12. No Windows, o código pode usar Python 3.10 de 32 bits ou Python 3.12 de 64 bits, com as dependências correspondentes. A instalação das dependências precisa de internet; o aplicativo em si funciona offline.
 
@@ -44,12 +53,13 @@ Depois de instalado pelo futuro instalador, Douglas precisará apenas do atalho 
 
 ## Como Douglas usa
 
-1. **Cadastrar aluno:** informe nome, valor da mensalidade, dia de vencimento e os outros dados desejados.
-2. **Primeira mensalidade:** escolha o primeiro mês que deve ser cobrado. Ao migrar alunos antigos, escolha o mês atual para não gerar dívidas antigas. Se esse mês já estiver pago, registre o pagamento.
-3. **Mensalidades:** filtre por **Em atraso**, **Vence hoje** ou **Próximos 7 dias**. O filtro de próximos dias inclui de amanhã ao sétimo dia, inclusive.
-4. **Receber:** confirme o valor integral recebido, a data e a forma de pagamento. O histórico fica disponível na ficha e no filtro **Pagas**.
-5. **Alunos → Ver ficha:** altere dados, desative ou exclua o aluno.
-6. **Dados e backup → Salvar backup:** guarde uma cópia em um pendrive ou outro local.
+1. **Definir o valor básico:** na aba **Mensalidades**, preencha **Valor da mensalidade (R$)** e clique em **Atualizar**.
+2. **Cadastrar aluno:** informe nome, dia de vencimento e os outros dados desejados. Selecione **Mensalidade básica** para acompanhar o valor geral ou **Valor personalizado** para informar um preço próprio.
+3. **Primeira mensalidade:** escolha o primeiro mês que deve ser cobrado. Ao migrar alunos antigos, escolha o mês atual para não gerar dívidas antigas. Se esse mês já estiver pago, registre o pagamento.
+4. **Mensalidades:** filtre por **Em atraso**, **Vence hoje** ou **Próximos 7 dias**. O filtro de próximos dias inclui de amanhã ao sétimo dia, inclusive.
+5. **Receber:** confirme o valor integral recebido, a data e a forma de pagamento. O histórico fica disponível na ficha e no filtro **Pagas**.
+6. **Alunos → Ver ficha:** altere dados, desative ou exclua o aluno.
+7. **Dados e backup → Salvar backup:** guarde uma cópia em um pendrive ou outro local.
 
 O arquivo [LEIA-ME.txt](LEIA-ME.txt) contém o guia curto para o Douglas.
 
@@ -60,6 +70,8 @@ O arquivo [LEIA-ME.txt](LEIA-ME.txt) contém o guia curto para o Douglas.
 - Dias 29, 30 e 31 usam o último dia em meses mais curtos, incluindo fevereiro de anos bissextos.
 - O mês inicial é fixado no cadastro. Não há rateio, juros, pagamentos parciais ou integração com banco; **Receber** registra o pagamento informado pelo Douglas.
 - Alterar valor ou dia atualiza apenas mensalidades em aberto que ainda não venceram. Se o novo dia já tiver passado, a cobrança que era futura vence hoje. Pagamentos e atrasos anteriores preservam os valores e datas originais.
+- Reajustar a mensalidade básica atualiza o cadastro de todos os alunos vinculados, inclusive inativos para uma futura reativação, e as cobranças em aberto com vencimento de hoje em diante. Valores personalizados não acompanham esse reajuste. O novo preço também vale para os próximos cadastros e cobranças.
+- Cadastros de versões anteriores mantêm seus valores como personalizados. Para vinculá-los ao básico, abra **Alunos → Ver ficha → Editar cadastro** e escolha **Mensalidade básica**. A configuração e os vínculos ficam no banco e nos backups; cópias da versão anterior continuam podendo ser restauradas.
 - Desativar mantém pagamentos e dívidas anteriores, remove cobranças em aberto de hoje em diante e interrompe novas cobranças. Reativar retoma no próximo vencimento, sem cobrar o período inativo.
 - Excluir pede confirmação e apaga cadastro e histórico. O aplicativo guarda antes uma cópia completa dos dados na pasta `backups`.
 - O valor **Recebido neste mês** usa a data do recebimento, mesmo que a mensalidade seja de um mês anterior.

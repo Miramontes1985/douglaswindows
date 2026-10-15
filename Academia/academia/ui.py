@@ -193,6 +193,14 @@ class MemberDialog(QDialog):
         self.amount.setPlaceholderText("Ex.: 150,00")
         self.amount.setMaxLength(12)
         self.amount.setObjectName("monthlyAmount")
+        self.fee_type = QComboBox()
+        self.fee_type.setObjectName("memberFeeType")
+        self.fee_type.addItem("Mensalidade básica", "basic")
+        self.fee_type.addItem("Valor personalizado", "custom")
+        self.fee_type.setCurrentIndex(self.fee_type.findData(member["fee_type"] if member else "basic"))
+        self._custom_amount = self.amount.text() if member and member["fee_type"] == "custom" else ""
+        self.fee_note = label("", "muted", True)
+        self.fee_type.currentIndexChanged.connect(self.update_fee_fields)
         self.due_day = QSpinBox()
         self.due_day.setRange(1, 31)
         self.due_day.setPrefix("Dia ")
@@ -205,13 +213,16 @@ class MemberDialog(QDialog):
         self.notes.setFixedHeight(80)
         specs = [("Nome completo *", self.name, 0, 0, 2), ("Telefone", self.phone, 2, 0, 2),
                  ("Endereço", self.address, 4, 0, 2), ("Data de entrada", self.joined, 6, 0, 1),
-                 ("Mensalidade (R$) *", self.amount, 6, 1, 1), ("Vencimento todo mês", self.due_day, 8, 0, 1),
-                 ("Primeira mensalidade", self.first_month, 8, 1, 1), ("Observações", self.notes, 10, 0, 2)]
+                 ("Vencimento todo mês", self.due_day, 6, 1, 1),
+                 ("Tipo de mensalidade", self.fee_type, 8, 0, 1), ("Valor da mensalidade (R$) *", self.amount, 8, 1, 1),
+                 ("Primeira mensalidade", self.first_month, 10, 0, 2), ("Observações", self.notes, 13, 0, 2)]
         for text, field, row, col, span in specs:
             caption = label(text, "field")
             caption.setBuddy(field)
             form.addWidget(caption, row, col, 1, span)
             form.addWidget(field, row + 1, col, 1, span)
+        form.addWidget(self.fee_note, 12, 0, 1, 2)
+        self.update_fee_fields()
         scroll.setWidget(fields)
         root.addWidget(scroll, 1)
         note = label("Alterações de valor e vencimento valem para cobranças ainda não vencidas. O histórico é preservado."
@@ -229,12 +240,31 @@ class MemberDialog(QDialog):
         root.addLayout(actions)
         self.name.setFocus()
 
+    def update_fee_fields(self, *_):
+        basic = self.fee_type.currentData() == "basic"
+        if basic:
+            if not self.amount.isReadOnly():
+                self._custom_amount = self.amount.text()
+            cents = self.store.basic_monthly_cents()
+            self.amount.setText(f"{cents / 100:.2f}".replace(".", ",") if cents is not None else "")
+            self.amount.setPlaceholderText("Defina em Mensalidades")
+            self.fee_note.setText("Este aluno acompanha o valor básico definido na aba Mensalidades."
+                                  if cents is not None else "Defina o valor da mensalidade básica na aba Mensalidades antes de salvar.")
+        else:
+            if self.amount.isReadOnly():
+                self.amount.setText(self._custom_amount or self.amount.text())
+            self.amount.setPlaceholderText("Ex.: 150,00")
+            self.fee_note.setText("O valor personalizado é definido para este aluno e não acompanha reajustes da mensalidade básica.")
+        self.amount.setReadOnly(basic)
+
     def save(self):
         try:
             values = {
                 "name": self.name.text(), "phone": self.phone.text(), "address": self.address.text(),
                 "joined_on": self.joined.date().toPython().isoformat(),
-                "monthly_cents": parse_money(self.amount.text()), "due_day": self.due_day.value(),
+                "fee_type": self.fee_type.currentData(),
+                "monthly_cents": parse_money(self.amount.text()) if self.fee_type.currentData() == "custom" else None,
+                "due_day": self.due_day.value(),
                 "first_month": self.first_month.date().toPython().replace(day=1).isoformat(),
                 "notes": self.notes.toPlainText(),
             }
@@ -295,7 +325,8 @@ class MemberProfile(QDialog):
         self.root.addLayout(head)
         info = panel()
         lines = vbox(info, 18, 7)
-        lines.addWidget(label(f"Mensalidade: {money(member['monthly_cents'])}   •   Vencimento: dia {member['due_day']:02d}"))
+        fee_label = "Mensalidade básica" if member["fee_type"] == "basic" else "Mensalidade personalizada"
+        lines.addWidget(label(f"{fee_label}: {money(member['monthly_cents'])}   •   Vencimento: dia {member['due_day']:02d}"))
         lines.addWidget(label("Entrou em " + date.fromisoformat(member["joined_on"]).strftime("%d/%m/%Y"), "muted"))
         lines.addWidget(label("Telefone: " + (member["phone"] or "Não informado"), "muted"))
         lines.addWidget(label("Endereço: " + (member["address"] or "Não informado"), "muted", True))
@@ -487,7 +518,7 @@ class MainWindow(QMainWindow):
         titles = {
             "home": ("Visão geral", "Um olhar rápido para o que precisa da sua atenção."),
             "members": ("Seus alunos", "Cadastre, encontre e acompanhe cada aluno da academia."),
-            "invoices": ("Contas a receber", "Saiba quem já pagou e quais mensalidades estão em aberto."),
+            "invoices": ("Mensalidades", "Saiba quem já pagou e quais mensalidades estão em aberto."),
             "data": ("Dados e backup", "Seus cadastros e pagamentos, sempre com você."),
         }
         title, subtitle = titles[page]
@@ -706,7 +737,8 @@ class MainWindow(QMainWindow):
         for r, item in enumerate(rows):
             cell(table, r, 0, item["name"], True, item["name"])
             cell(table, r, 1, item["phone"] or "—")
-            cell(table, r, 2, money(item["monthly_cents"]))
+            cell(table, r, 2, money(item["monthly_cents"]),
+                 tooltip="Mensalidade básica" if item["fee_type"] == "basic" else "Valor personalizado")
             cell(table, r, 3, f"Todo dia {item['due_day']:02d}")
             cell_widget(table, r, 4, badge("Ativo" if item["active"] else "Inativo", "active" if item["active"] else "inactive"))
             cell_widget(table, r, 5, button("Ver ficha", lambda checked=False, i=item["id"]: self.show_member(i), "link"))
@@ -715,6 +747,33 @@ class MainWindow(QMainWindow):
         self.member_result_layout.addWidget(area)
 
     def build_invoices(self):
+        settings = panel()
+        settings_layout = vbox(settings, 20, 10)
+        settings_layout.addWidget(label("Mensalidade básica", "section"))
+        settings_layout.addWidget(label("Ao atualizar, o novo valor vale para todos os alunos com mensalidade básica, "
+                                        "nas cobranças de hoje em diante. Mensalidades pagas ou já vencidas mantêm o valor anterior.", "muted", True))
+        amount_label = label("Valor da mensalidade (R$)", "field")
+        settings_layout.addWidget(amount_label)
+        row = QHBoxLayout()
+        cents = self.store.basic_monthly_cents()
+        self.basic_amount = QLineEdit(f"{cents / 100:.2f}".replace(".", ",") if cents is not None else "")
+        self.basic_amount.setObjectName("basicMonthlyAmount")
+        self.basic_amount.setPlaceholderText("Ex.: 150,00")
+        self.basic_amount.setMaxLength(12)
+        self.basic_amount.setMaximumWidth(230)
+        amount_label.setBuddy(self.basic_amount)
+        row.addWidget(self.basic_amount)
+        self.update_basic_button = button("Atualizar", self.update_basic_fee, "primary", "check")
+        self.update_basic_button.setObjectName("updateBasicMonthlyAmount")
+        row.addWidget(self.update_basic_button)
+        row.addStretch()
+        settings_layout.addLayout(row)
+        self.basic_message = label("", "error", True)
+        self.basic_message.hide()
+        settings_layout.addWidget(self.basic_message)
+        if cents is None:
+            settings_layout.addWidget(label("Defina o valor básico para usá-lo no cadastro de novos alunos.", "muted", True))
+        self.body.addWidget(settings)
         self.filter_buttons = {}
         filters = QHBoxLayout()
         filters.setSpacing(4)
@@ -733,7 +792,7 @@ class MainWindow(QMainWindow):
         self.search_invoices = self.search_input(self.invoice_search, "Buscar mensalidades por aluno")
         self.search_invoices.textChanged.connect(self.filter_invoices)
         tools.addWidget(self.search_invoices, 1)
-        tools.addWidget(button("Atualizar", lambda: self.refresh("Mensalidades atualizadas."), symbol="refresh"))
+        tools.addWidget(button("Atualizar lista", lambda: self.refresh("Mensalidades atualizadas."), symbol="refresh"))
         tools.addWidget(button("Exportar Excel", self.export_invoices, symbol="export"))
         self.body.addLayout(tools)
         self.invoice_results = QWidget()
@@ -741,6 +800,16 @@ class MainWindow(QMainWindow):
         self.body.addWidget(self.invoice_results)
         self.update_invoice_results()
         self.body.addWidget(label("As mensalidades são criadas automaticamente. Próximos 7 dias inclui de amanhã até o 7º dia; hoje tem um filtro próprio.", "muted", True))
+
+    def update_basic_fee(self):
+        try:
+            cents = parse_money(self.basic_amount.text())
+            self.store.set_basic_monthly_cents(cents, self.today_provider())
+        except (ValueError, OSError) as exc:
+            self.basic_message.setText(str(exc))
+            self.basic_message.show()
+            return
+        self.refresh(f"Mensalidade básica atualizada para {money(cents)} em todos os alunos vinculados.")
 
     def set_invoice_filter(self, state):
         self.invoice_filter = state

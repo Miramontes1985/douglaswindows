@@ -3,7 +3,7 @@
   #define BuildArchitecture "auto"
 #endif
 #define AppName "Power Academia"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppExeName "PowerAcademia.exe"
 
 [Setup]

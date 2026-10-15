@@ -1,12 +1,20 @@
 POWER ACADEMIA
 
 1. Abra a Power Academia pelo atalho na Área de Trabalho.
-2. Clique em Cadastrar aluno e preencha os dados.
-3. Em Mensalidades, veja os valores em atraso, que vencem hoje ou nos próximos 7 dias.
-4. Quando o aluno pagar, clique em Receber e confirme a data e a forma de pagamento.
-5. Para editar, desativar ou excluir alguém, abra Alunos e clique em Ver ficha.
-6. Abaixo de Dados e backup, use o sol (Claro) ou a lua (Escuro) para escolher o tema.
-7. Em Dados e backup, use Salvar backup para guardar uma cópia em um pendrive.
+2. Em Mensalidades, defina o Valor da mensalidade e clique em Atualizar.
+   Esse é o valor da Mensalidade básica.
+3. Clique em Cadastrar aluno e escolha Mensalidade básica ou Valor personalizado.
+4. Em Mensalidades, veja os valores em atraso, que vencem hoje ou nos próximos 7 dias.
+5. Quando o aluno pagar, clique em Receber e confirme a data e a forma de pagamento.
+6. Para editar, desativar ou excluir alguém, abra Alunos e clique em Ver ficha.
+7. Abaixo de Dados e backup, use o sol (Claro) ou a lua (Escuro) para escolher o tema.
+8. Em Dados e backup, use Salvar backup para guardar uma cópia em um pendrive.
+
+Para reajustar o preço, altere o valor básico em Mensalidades e clique em Atualizar.
+Todos os alunos que usam Mensalidade básica acompanham o novo valor nas cobranças
+de hoje em diante. Valores personalizados, mensalidades pagas e atrasadas não mudam.
+Cadastros antigos mantêm seu valor personalizado. Para usar o básico, altere a opção
+em Alunos > Ver ficha > Editar cadastro.
 
 Os dados são salvos automaticamente. O aplicativo funciona sem internet.
 Para abrir as exportações no Excel, escolha o arquivo CSV gerado pelo aplicativo.

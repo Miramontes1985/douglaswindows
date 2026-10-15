@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 APP_ID = 0x44414341
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STATUSES = {
     "late": "Em atraso",
     "today": "Vence hoje",
@@ -111,6 +111,9 @@ class Store:
         if identity not in (0, APP_ID) or version > SCHEMA_VERSION:
             self.connection.close()
             raise ValueError("Este arquivo de dados não é compatível com esta versão do aplicativo.")
+        self._initialize_schema()
+
+    def _initialize_schema(self):
         self.connection.executescript(f"""
             CREATE TABLE IF NOT EXISTS members (
                 id INTEGER PRIMARY KEY,
@@ -139,11 +142,37 @@ class Store:
             );
             CREATE INDEX IF NOT EXISTS invoice_due_idx ON invoices(due_on, paid_on);
             PRAGMA application_id={APP_ID};
-            PRAGMA user_version={SCHEMA_VERSION};
         """)
+        with self.connection:
+            columns = {row["name"] for row in self.connection.execute("PRAGMA table_info(members)")}
+            if "fee_type" not in columns:
+                # Cadastros antigos conservam seus valores até escolherem o plano básico.
+                self.connection.execute("""ALTER TABLE members ADD COLUMN fee_type TEXT NOT NULL
+                    DEFAULT 'custom' CHECK(fee_type IN ('basic','custom'))""")
+            self.connection.execute("""CREATE TABLE IF NOT EXISTS billing_settings (
+                id INTEGER PRIMARY KEY CHECK(id=1),
+                basic_monthly_cents INTEGER CHECK(basic_monthly_cents BETWEEN 1 AND 99999999)
+            )""")
+            self.connection.execute("INSERT OR IGNORE INTO billing_settings(id) VALUES(1)")
+            self.connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     def close(self):
         self.connection.close()
+
+    def basic_monthly_cents(self) -> int | None:
+        return self.connection.execute("SELECT basic_monthly_cents FROM billing_settings WHERE id=1").fetchone()[0]
+
+    def set_basic_monthly_cents(self, cents: int, today: date):
+        if type(cents) is not int or not 1 <= cents <= 99999999:
+            raise ValueError("Informe um valor válido para a mensalidade básica, por exemplo: 150,00.")
+        with self.connection:
+            # Gera meses pendentes com o preço anterior antes de aplicar o reajuste.
+            self._generate(today)
+            self.connection.execute("UPDATE billing_settings SET basic_monthly_cents=? WHERE id=1", (cents,))
+            self.connection.execute("UPDATE members SET monthly_cents=? WHERE fee_type='basic'", (cents,))
+            self.connection.execute("""UPDATE invoices SET amount_cents=?
+                WHERE member_id IN (SELECT id FROM members WHERE fee_type='basic')
+                AND paid_on IS NULL AND due_on>=?""", (cents, today.isoformat()))
 
     def member(self, member_id: int) -> dict:
         row = self.connection.execute("SELECT * FROM members WHERE id=?", (member_id,)).fetchone()
@@ -160,13 +189,20 @@ class Store:
                       key=lambda row: normalized(row["name"]))
 
     def save_member(self, values: dict, today: date, member_id: int | None = None) -> int:
+        old = self.member(member_id) if member_id is not None else None
         data = {key: str(values.get(key, "")).strip() for key in ("name", "phone", "address", "notes")}
+        data["fee_type"] = values.get("fee_type", old["fee_type"] if old else "custom")
+        if data["fee_type"] not in ("basic", "custom"):
+            raise ValueError("Escolha a mensalidade básica ou um valor personalizado.")
+        basic_cents = self.basic_monthly_cents() if data["fee_type"] == "basic" else None
+        if data["fee_type"] == "basic" and basic_cents is None:
+            raise ValueError("Defina o valor da mensalidade básica na aba Mensalidades antes de cadastrar o aluno.")
         if not 2 <= len(data["name"]) <= 120:
             raise ValueError("Informe o nome do aluno, com pelo menos 2 letras.")
         try:
             data["joined_on"] = date.fromisoformat(values["joined_on"]).isoformat()
             data["due_day"] = int(values["due_day"])
-            data["monthly_cents"] = int(values["monthly_cents"])
+            data["monthly_cents"] = basic_cents if basic_cents is not None else int(values["monthly_cents"])
             data["first_month"] = month_start(date.fromisoformat(values["first_month"])).isoformat()
         except (KeyError, ValueError, TypeError):
             raise ValueError("Confira as datas, o dia do vencimento e o valor da mensalidade.") from None
@@ -182,18 +218,17 @@ class Store:
             if member_id is None:
                 cursor = self.connection.execute("""
                     INSERT INTO members(name,phone,address,joined_on,due_day,monthly_cents,
-                                        first_month,billing_from,notes)
+                                        first_month,billing_from,notes,fee_type)
                     VALUES(:name,:phone,:address,:joined_on,:due_day,:monthly_cents,
-                           :first_month,:first_month,:notes)
+                           :first_month,:first_month,:notes,:fee_type)
                 """, data)
                 member_id = cursor.lastrowid
             else:
-                old = self.member(member_id)
                 if data["first_month"] != old["first_month"]:
                     raise ValueError("O mês inicial é definido no cadastro e não pode ser alterado.")
                 self.connection.execute("""
                     UPDATE members SET name=:name,phone=:phone,address=:address,joined_on=:joined_on,
-                        due_day=:due_day,monthly_cents=:monthly_cents,notes=:notes WHERE id=:id
+                        due_day=:due_day,monthly_cents=:monthly_cents,notes=:notes,fee_type=:fee_type WHERE id=:id
                 """, {**data, "id": member_id})
                 for row in self.connection.execute(
                         "SELECT id,month FROM invoices WHERE member_id=? AND paid_on IS NULL AND due_on>=?",
@@ -343,18 +378,23 @@ class Store:
         try:
             candidate = sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)
             if (candidate.execute("PRAGMA application_id").fetchone()[0] != APP_ID
-                    or candidate.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION
+                    or candidate.execute("PRAGMA user_version").fetchone()[0] not in (1, SCHEMA_VERSION)
                     or candidate.execute("PRAGMA integrity_check").fetchone()[0] != "ok"):
                 raise ValueError("O arquivo escolhido não é um backup válido da Power Academia.")
             # Confere as tabelas/colunas antes de tocar nos dados atuais.
             candidate.execute("SELECT name,phone,address,joined_on,due_day,monthly_cents,first_month,billing_from,active,notes FROM members LIMIT 1")
             candidate.execute("SELECT member_id,month,due_on,amount_cents,paid_on,payment_method FROM invoices LIMIT 1")
+            if candidate.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION:
+                candidate.execute("SELECT fee_type FROM members LIMIT 1")
+                if candidate.execute("SELECT id,basic_monthly_cents FROM billing_settings WHERE id=1").fetchone() is None:
+                    raise ValueError("O backup não contém a configuração de mensalidades.")
             if candidate.execute("PRAGMA foreign_key_check").fetchone():
                 raise ValueError("O backup contém registros incompletos e não pode ser restaurado.")
             folder = self.directory / "backups"
             folder.mkdir(exist_ok=True)
             safety = self.backup(folder / f"antes-de-restaurar-{datetime.now():%Y%m%d-%H%M%S-%f}.sqlite3")
             candidate.backup(self.connection)
+            self._initialize_schema()
             self.connection.execute("PRAGMA foreign_keys=ON")
             return safety
         except sqlite3.DatabaseError:
@@ -373,12 +413,13 @@ class Store:
         with open(destination, "w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.writer(handle, delimiter=";")
             writer.writerow(["Nome", "Telefone", "Endereço", "Data de entrada", "Dia de vencimento",
-                             "Mensalidade (R$)", "Situação", "Observações"])
+                             "Mensalidade (R$)", "Situação", "Observações", "Tipo de mensalidade"])
             for row in self.members():
                 writer.writerow([self._csv_text(row["name"]), self._csv_text(row["phone"]),
                                  self._csv_text(row["address"]), date.fromisoformat(row["joined_on"]).strftime("%d/%m/%Y"),
                                  row["due_day"], f'{row["monthly_cents"]/100:.2f}'.replace(".", ","),
-                                 "Ativo" if row["active"] else "Inativo", self._csv_text(row["notes"])])
+                                 "Ativo" if row["active"] else "Inativo", self._csv_text(row["notes"]),
+                                 "Mensalidade básica" if row["fee_type"] == "basic" else "Valor personalizado"])
 
     def export_invoices(self, destination: str | Path, invoices: list[dict], today: date):
         with open(destination, "w", newline="", encoding="utf-8-sig") as handle:

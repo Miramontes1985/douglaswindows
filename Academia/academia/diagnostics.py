@@ -21,26 +21,35 @@ def verify_packaged_app(window, destination: Path) -> int:
         from .ui import MemberDialog, PaymentDialog
         store, today = window.store, date.today()
         assert (ASSETS / "douglas.png").is_file(), "Retrato não incluído no pacote"
+        store.set_basic_monthly_cents(15000, today)
         mid = store.save_member({"name": "Teste de instalação", "joined_on": today.isoformat(),
-            "due_day": today.day, "monthly_cents": 15000, "first_month": today.replace(day=1).isoformat()}, today)
+            "due_day": today.day, "fee_type": "basic", "first_month": today.replace(day=1).isoformat()}, today)
         window.refresh()
         for mode in ("dark", "light"):
             window.set_theme(mode)
             for page in ("home", "members", "invoices", "data"):
                 window.open_page(page)
+        window.open_page("invoices")
+        window.basic_amount.setText("175,50")
+        window.update_basic_button.click()
+        assert store.basic_monthly_cents() == 17550
+        assert store.member(mid)["monthly_cents"] == 17550
         invoice = store.invoices(today, member_id=mid)[0]
+        assert invoice["amount_cents"] == 17550
         for dialog in (MemberDialog(store, today, window), PaymentDialog(invoice, today, window)):
             dialog.show()
             QtCore.QCoreApplication.processEvents()
             dialog.close()
         store.pay(invoice["id"], today, "Pix", today)
-        assert store.summary(today)["received"] == 15000
+        assert store.summary(today)["received"] == 17550
         store.export_members(store.directory / "alunos.csv")
         copy = store.backup(store.directory / "verificacao.sqlite3")
         store.delete_member(mid)
         store.restore(copy)
         assert store.member(mid)["name"] == "Teste de instalação"
-        assert store.summary(today)["received"] == 15000
+        assert store.summary(today)["received"] == 17550
+        assert store.basic_monthly_cents() == 17550
+        assert store.member(mid)["fee_type"] == "basic"
         result["ok"] = True
     except Exception:
         result["error"] = traceback.format_exc()
