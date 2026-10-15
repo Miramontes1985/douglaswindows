@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: power-academia-windows
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: windows-2022

@@ -73,6 +73,8 @@ def main():
             store.close()
         if lock:
             lock.unlock()
+        # No Windows, o arquivo de log aberto impede remover a pasta temporária.
+        logging.shutdown()
         if temporary:
             temporary.cleanup()
 
