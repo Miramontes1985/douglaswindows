@@ -122,7 +122,7 @@ O script cria ambientes separados `.venv-x86` e `.venv-x64`, executa os testes e
 .\build_windows.ps1 -Architecture x64
 ```
 
-O fluxo `.github/workflows/power-academia-windows.yml` faz esses passos em Windows Server 2022 e verifica os três instaladores. Depois da instalação, abre o executável com dados temporários e verifica telas, temas, cadastro, pagamento, exportação e restauração. Os arquivos são guardados como artefatos do Actions. A entrega adicional usa a branch `build/power-academia-installers` do mesmo repositório, com partes e hashes SHA-256 para conferir o download.
+O fluxo `.github/workflows/power-academia-windows.yml` faz esses passos em Windows Server 2022 e verifica os três instaladores. Depois da instalação, abre o executável com dados temporários e verifica telas, temas, cadastro, pagamento, exportação e restauração. Os arquivos são guardados como artefatos do Actions.
 
 O parâmetro interno `--self-test caminho-do-relatorio.json` permite conferir um executável sem tocar nos dados reais. Ele sempre usa uma pasta temporária e encerra ao concluir. O pacote final dispensa Python, terminal e internet no computador do Douglas.
 

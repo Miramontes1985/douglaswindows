@@ -5,7 +5,7 @@ on:
     branches: [main, codex/power-academia-windows]
     paths: ['Academia/**', '.github/workflows/power-academia-windows.yml']
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: power-academia-windows
   cancel-in-progress: false
@@ -62,9 +62,3 @@ jobs:
             Academia/*.log
           if-no-files-found: warn
           retention-days: 30
-      - name: Disponibilizar resultado no repositorio de compilacao
-        if: always()
-        env:
-          BUILD_STATUS: ${{ job.status }}
-        run: |
-          python scripts/publish_build.py
