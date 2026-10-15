@@ -1,0 +1,70 @@
+name: Power Academia - instaladores Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, codex/power-academia-windows]
+    paths: ['Academia/**', '.github/workflows/power-academia-windows.yml']
+permissions:
+  contents: write
+concurrency:
+  group: power-academia-windows
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: Academia
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: python32
+        with:
+          python-version: '3.10'
+          architecture: x86
+      - uses: actions/setup-python@v5
+        id: python64
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Testar e compilar 32 bits
+        run: |
+          ./build_windows.ps1 -Architecture x86 -PythonExe '${{ steps.python32.outputs.python-path }}' -SkipInstaller *>&1 | Tee-Object -FilePath build-x86.log
+      - name: Testar e compilar 64 bits
+        run: |
+          ./build_windows.ps1 -Architecture x64 -PythonExe '${{ steps.python64.outputs.python-path }}' -SkipInstaller *>&1 | Tee-Object -FilePath build-x64.log
+      - name: Gerar os tres instaladores
+        run: |
+          $compiler = (Get-Command ISCC.exe -ErrorAction Stop).Source
+          foreach ($variant in @('x86', 'x64', 'auto')) {
+            & $compiler "/DBuildArchitecture=$variant" installer.iss *>&1 | Tee-Object -FilePath "installer-$variant.log"
+            if ($LASTEXITCODE -ne 0) { throw "Falha ao gerar instalador $variant" }
+          }
+      - name: Conferir instalacoes completas
+        run: |
+          foreach ($variant in @('32bits', '64bits', 'auto')) {
+            $name = if ($variant -eq 'auto') { 'Instalar-Power-Academia.exe' } else { "Instalar-Power-Academia-$variant.exe" }
+            $destination = Join-Path $env:RUNNER_TEMP "power-installed-$variant"
+            $process = Start-Process -FilePath (Resolve-Path "output/$name") -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',('/DIR="' + $destination + '"'),'/MERGETASKS=!desktopicon') -PassThru -Wait
+            if ($process.ExitCode -ne 0) { throw "Falha ao instalar $variant" }
+            $bits = if ($variant -eq '32bits') { 32 } else { 64 }
+            ./scripts/verify_binary.ps1 -Executable "$destination/PowerAcademia.exe" -Bits $bits *>&1 | Tee-Object -FilePath "installed-$variant.log"
+          }
+      - name: Guardar instaladores e registros
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Power-Academia-Windows
+          path: |
+            Academia/output/*.exe
+            Academia/*.log
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Disponibilizar resultado no repositorio de compilacao
+        if: always()
+        env:
+          BUILD_STATUS: ${{ job.status }}
+        run: |
+          python scripts/publish_build.py

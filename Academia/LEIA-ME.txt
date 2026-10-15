@@ -1,0 +1,21 @@
+POWER ACADEMIA
+
+1. Abra a Power Academia pelo atalho na Área de Trabalho.
+2. Clique em Cadastrar aluno e preencha os dados.
+3. Em Mensalidades, veja os valores em atraso, que vencem hoje ou nos próximos 7 dias.
+4. Quando o aluno pagar, clique em Receber e confirme a data e a forma de pagamento.
+5. Para editar, desativar ou excluir alguém, abra Alunos e clique em Ver ficha.
+6. Abaixo de Dados e backup, use o sol (Claro) ou a lua (Escuro) para escolher o tema.
+7. Em Dados e backup, use Salvar backup para guardar uma cópia em um pendrive.
+
+Os dados são salvos automaticamente. O aplicativo funciona sem internet.
+Para abrir as exportações no Excel, escolha o arquivo CSV gerado pelo aplicativo.
+
+IMPORTANTE PARA O CADASTRO INICIAL
+A primeira mensalidade define de qual mês começam as cobranças.
+Se o aluno já pagou esse mês, registre o pagamento em Mensalidades.
+Meses anteriores ao mês escolhido não serão cobrados.
+
+Desativar interrompe novas cobranças e preserva o histórico.
+Excluir apaga o cadastro e o histórico, depois de pedir confirmação.
+O aplicativo guarda uma cópia antes de excluir um aluno ou restaurar um backup.

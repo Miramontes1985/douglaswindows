@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+dados/
+*.sqlite3*
+backups/
+build/
+dist/
+output/
+!assets/app.ico
+.venv-x86/
+.venv-x64/

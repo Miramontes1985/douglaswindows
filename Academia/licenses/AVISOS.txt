@@ -1,0 +1,22 @@
+Power Academia inclui componentes de terceiros:
+
+Python 3.10 (x86) / Python 3.12 (x64)
+Copyright Python Software Foundation e colaboradores.
+https://www.python.org/
+Licenças: Python-3.10.txt e Python-3.12.txt.
+
+Qt / PySide / Shiboken
+Copyright The Qt Company Ltd. e colaboradores.
+https://www.qt.io/qt-for-python
+Os componentes Qt/PySide são usados como bibliotecas compartilhadas.
+Licença LGPL versão 3 (inclui condições da GPL versão 3): LGPL-3.0.txt e GPL-3.0.txt.
+Fontes correspondentes:
+https://code.qt.io/cgit/pyside/pyside-setup.git/tag/?h=v5.15.2.1
+https://code.qt.io/cgit/pyside/pyside-setup.git/tag/?h=v6.8.3
+https://download.qt.io/archive/qt/5.15/5.15.2/single/
+https://download.qt.io/archive/qt/6.8/6.8.3/single/
+
+PyInstaller
+https://pyinstaller.org/
+O bootloader é distribuído sob GPL com exceção de distribuição de aplicativos.
+https://pyinstaller.org/en/stable/license.html

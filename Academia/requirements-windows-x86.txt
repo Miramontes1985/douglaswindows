@@ -1,0 +1,2 @@
+# Python 3.10 x86; Qt 5 oferece binários Windows de 32 bits.
+PySide2==5.15.2.1

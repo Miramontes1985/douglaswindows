@@ -1,0 +1,2 @@
+-r requirements-windows-x86.txt
+PyInstaller==6.13.0
