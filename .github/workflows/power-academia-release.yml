@@ -1,0 +1,90 @@
+name: Power Academia - publicar instaladores verificados
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Compilacao Windows concluida com sucesso
+        required: true
+        default: '38738348941'
+      tag:
+        description: Versao da publicacao
+        required: true
+        default: 'v1.0.0'
+  push:
+    branches: [main]
+    paths: ['.github/workflows/power-academia-release.yml']
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN_ID: ${{ inputs.run_id || '38738348941' }}
+      RELEASE_TAG: ${{ inputs.tag || 'v1.0.0' }}
+    steps:
+      - name: Conferir compilacao de origem
+        id: build
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/build-run.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          run = json.loads((Path(os.environ['RUNNER_TEMP']) / 'build-run.json').read_text())
+          assert run['conclusion'] == 'success', 'A compilacao precisa ter passado em todos os testes.'
+          assert run['path'] == '.github/workflows/power-academia-windows.yml'
+          assert run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha=' + run['head_sha'] + '\n')
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: Power-Academia-Windows
+          path: verified-build
+          github-token: ${{ github.token }}
+          run-id: ${{ env.BUILD_RUN_ID }}
+      - name: Preparar os arquivos para download
+        run: |
+          mkdir publish
+          cp verified-build/output/Instalar-Power-Academia*.exe publish/
+          cp Academia/LEIA-ME.txt publish/
+          cat > publish/COMO-INSTALAR.txt <<'TXT'
+          POWER ACADEMIA
+
+          Use Instalar-Power-Academia.exe. Ele escolhe automaticamente a versao
+          adequada ao computador com Windows 10.
+
+          Abra o instalador e siga as instrucoes em portugues. Depois, abra
+          Power Academia pelo atalho na Area de Trabalho.
+
+          Os instaladores 32bits e 64bits sao alternativas ao automatico.
+          Nao precisa instalar Python nem ter internet para usar o aplicativo.
+          Use Dados e backup para salvar uma copia dos cadastros em um pendrive.
+          TXT
+          cd publish
+          test -s Instalar-Power-Academia.exe
+          test -s Instalar-Power-Academia-32bits.exe
+          test -s Instalar-Power-Academia-64bits.exe
+          sha256sum ./*.exe > SHA256SUMS.txt
+          zip -0 Power-Academia-Windows.zip ./*.exe LEIA-ME.txt COMO-INSTALAR.txt SHA256SUMS.txt
+          cat > "$RUNNER_TEMP/release-notes.md" <<TXT
+          Aplicativo local em português para cadastros e mensalidades da Power Academia, com temas claro e escuro.
+
+          **Recomendado:** baixe **Instalar-Power-Academia.exe**. Ele escolhe a versão adequada ao Windows 10.
+
+          Também estão disponíveis os instaladores separados de 32 e 64 bits e um ZIP com todos os arquivos. Não é necessário instalar Python.
+
+          Os 30 testes passaram em cada arquitetura. Os três instaladores foram instalados e o aplicativo foi verificado após cada instalação, incluindo cadastro, pagamentos, exportação e backup/restauração.
+
+          [Registro da compilação e dos testes](https://github.com/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID).
+          TXT
+      - name: Publicar os instaladores
+        env:
+          BUILD_SHA: ${{ steps.build.outputs.sha }}
+        run: |
+          gh release create "$RELEASE_TAG" publish/* --repo "$GITHUB_REPOSITORY" --target "$BUILD_SHA" --title 'Power Academia 1.0.0' --notes-file "$RUNNER_TEMP/release-notes.md"
