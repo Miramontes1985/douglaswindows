@@ -77,4 +77,4 @@ begin
      ((WindowsVersion.Major = 10) and (WindowsVersion.Build >= 17763)));
 end;
 
-; Dados e backups em {localappdata}\DouglasAcademia são preservados.
+// Dados e backups em {localappdata}\DouglasAcademia são preservados.

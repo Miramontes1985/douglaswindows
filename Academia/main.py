@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from datetime import date
 
-from academia.qt import exec_qt, QLocale, QLockFile, QTimer
+from academia.qt import BINDING, exec_qt, Qt, QCoreApplication, QLocale, QLockFile, QTimer
 from academia.qt import QApplication, QMessageBox
 
 from academia.storage import Store, data_directory
@@ -25,6 +25,9 @@ def main():
     args = parser.parse_args()
     if args.self_test:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    if BINDING == "PySide2":
+        QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+        QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv[:1])
     app.setApplicationName("Power Academia")
     app.setOrganizationName("Power Academia")
